@@ -22,6 +22,7 @@ runs:
   using: composite
   steps:
     - name: Get depth
+      shell: bash
       run: |
         if [[ "${{ env.ACT_DEPTH }}" ]]; then
           echo "depth_sha=$(( ${{ env.ACT_DEPTH }} + 1 ))" >> $GITHUB_ENV
@@ -47,11 +48,12 @@ runs:
         fi
 
     - name: Prepare git
+      shell: bash
       run: |
         if [[ "${{ env.ACT }}" ]]; then
           url="file://${{ inputs.act-mountpoint }}"
         else
-          url="https://${{ inputs.gh-token }}@github.com/${{ github.repository }}.git"
+          url="https://x-access-token:${{ inputs.gh-token }}@github.com/${{ github.repository }}.git"
         fi
 
         if [[ ! -d .git ]]; then
@@ -64,7 +66,7 @@ runs:
         git reset --hard
         git clean -xf .
 
-        if [[ ! "$(git rev-parse --abbrev-ref HEAD)"  == "trunk" ]]; then
+        if [[ ! "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"  == "trunk" ]]; then
           if [[ $(git rev-parse --verify "trunk" 2>/dev/null) ]]; then
             git branch -D trunk
           fi
@@ -72,6 +74,7 @@ runs:
         fi
 
     - name: Checkout
+      shell: bash
       run: |
         git fetch origin --depth=$depth_sha $head_sha
         git reset --hard $head_sha
