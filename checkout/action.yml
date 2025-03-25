@@ -7,23 +7,25 @@ inputs:
     required: false
   act:
     description: Enable local run mode with act
-    default: ${{ env.ACT }}
+    required: false
   act-mountpoint:
     description: The source mountpoint
     default: '/mnt/repo'
-  act-head:
-    description: The source head
-    default: ''
   gh-token:
     description: 'GitHub Token'
     default: ${{ github.token }}
+#env:
+# ACT_DEPTH: The depth when fetching, overwrites depth
+# ACT_HEAD: The head to fetch
 
 runs:
   using: composite
   steps:
     - name: Get depth
       run: |
-        if [[ "${{ inputs.depth }}" ]]; then
+        if [[ "${{ env.ACT_DEPTH }}" ]]; then
+          echo "depth_sha=$(( ${{ env.ACT_DEPTH }} + 1 ))" >> $GITHUB_ENV
+        elif [[ "${{ inputs.depth }}" ]]; then
           echo "depth_sha=$(( ${{ inputs.depth }} + 1 ))" >> $GITHUB_ENV
         elif [[ "${{ github.event.pull_request.commits }}" ]]; then
           echo "depth_sha=$(( ${{ github.event.pull_request.commits }} + 1 ))" >> $GITHUB_ENV
@@ -31,13 +33,13 @@ runs:
           echo "depth_sha=6" >> $GITHUB_ENV
         fi
 
-        if [[ "${{ inputs.act }}" ]]; then
-          if [[ "${{ inputs.act-head }}" ]]; then
-            act_head_sha="${{ inputs.act-head }}"
+        if [[ "${{ env.ACT }}" ]]; then
+          if [[ "${{ env.ACT_HEAD }}" ]]; then
+            act_head_sha="${{ env.ACT_HEAD }}"
           else
-            act_head_sha="HEAD"
+            act_head_sha="@"
           fi
-          echo "head_sha=$(cd ${{ inputs.act-mountpoint }} ; git rev-parse --abbrev-ref $act_head_sha)" >> $GITHUB_ENV
+          echo "head_sha=$(cd ${{ inputs.act-mountpoint }} ; git rev-parse $act_head_sha)" >> $GITHUB_ENV
         elif [[ "${{ github.event.pull_request.head.sha }}" ]]; then
           echo "head_sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_ENV
         elif [[ "${{ github.sha }}" ]]; then
@@ -46,7 +48,7 @@ runs:
 
     - name: Prepare git
       run: |
-        if [[ "${{ inputs.act }}" ]]; then
+        if [[ "${{ env.ACT }}" ]]; then
           url="file://${{ inputs.act-mountpoint }}"
         else
           url="https://${{ inputs.gh-token }}@github.com/${{ github.repository }}.git"
@@ -59,9 +61,15 @@ runs:
           git remote set-url origin "$url"
         fi
 
+        git reset --hard
         git clean -xf .
-        git restore --staged .
-        git restore .
+
+        if [[ ! "$(git rev-parse --abbrev-ref HEAD)"  == "trunk" ]]; then
+          if [[ $(git rev-parse --verify "trunk" 2>/dev/null) ]]; then
+            git branch -D trunk
+          fi
+          git branch -m trunk
+        fi
 
     - name: Checkout
       run: |
